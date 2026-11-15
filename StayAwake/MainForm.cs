@@ -25,12 +25,17 @@ namespace MoveGameProvider
             trayMenu.Items.Add("Exit", null, OnExit);
 
             trayIcon = new NotifyIcon();
-            trayIcon.Text = "State Server";
-            trayIcon.Icon = SystemIcons.WinLogo;
+            trayIcon.Text = "StayAwake – lid close: do nothing";
+            using (var iconStream = typeof(MainForm).Assembly.GetManifestResourceStream("StayAwake.ico")!)
+            {
+                // Pick the frame that matches the tray size for the current DPI
+                trayIcon.Icon = new Icon(iconStream, SystemInformation.SmallIconSize);
+            }
+            Icon = trayIcon.Icon;
             trayIcon.ContextMenuStrip = trayMenu;
             trayIcon.Visible = true;
         }
-        private void OnExit(object sender, EventArgs e)
+        private void OnExit(object? sender, EventArgs e)
         {
             Application.Exit();
         }
@@ -42,6 +47,17 @@ namespace MoveGameProvider
             SetThreadExecutionState(
                 ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
 
+            // Don't sleep (and lock) when the lid is closed
+            try
+            {
+                LidCloseOverride.Apply();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Could not change the lid-close action:\n" + ex.Message, "StayAwake",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+
             // Optional: hide the window
             this.WindowState = FormWindowState.Minimized;
             this.ShowInTaskbar = false;
@@ -51,6 +67,15 @@ namespace MoveGameProvider
         {
             // Reset state when app closes (IMPORTANT)
             SetThreadExecutionState(ES_CONTINUOUS);
+
+            try
+            {
+                LidCloseOverride.Restore();
+            }
+            catch (Exception)
+            {
+                // The backup file is kept when restoring fails, so the next launch retries it.
+            }
 
             base.OnFormClosing(e);
         }
